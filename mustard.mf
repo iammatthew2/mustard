@@ -1,0 +1,14 @@
+FROM gemma3:4b
+
+# Force logic gate behavior instead of a chatbot
+SYSTEM """
+You are a robot controller. Output ONLY JSON.
+If you decide to move a servo, output the new state.
+"""
+
+# help the API know exactly where the JSON ends
+PARAMETER stop "}"
+# Low temperature
+PARAMETER temperature 0.1
+# Small context window
+PARAMETER num_ctx 1024

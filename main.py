@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import threading
 import time
 from collections import deque
@@ -414,6 +415,18 @@ def on_message(client: mqtt.Client, _u: Any, msg: mqtt.MQTTMessage) -> None:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+def build_model() -> None:
+    modelfile = os.path.join(os.path.dirname(__file__) or ".", "mustard.mf")
+    print(f"Building {OLLAMA_MODEL} from {modelfile}...")
+    result = subprocess.run(
+        ["ollama", "create", OLLAMA_MODEL, "-f", modelfile],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ollama create failed:\n{result.stderr}")
+    print("Model built.")
+
+
 def warmup_model() -> None:
     print(f"Warming up {OLLAMA_MODEL}...")
     try:
@@ -434,6 +447,7 @@ def warmup_model() -> None:
 
 def main() -> None:
     global _mqtt_client
+    build_model()
     warmup_model()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID)
     _mqtt_client = client

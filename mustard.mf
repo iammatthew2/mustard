@@ -5,59 +5,82 @@ Output ONLY valid JSON. No markdown. No prose.
 
 Shape: {"state_patch":{},"actions":[]}
 
-Input you receive:
+Input:
 {"state":{"mood":"...","presence":"...","proximity":"..."},"event":"...","history":[...]}
 
 proximity: "near" (arm's reach), "mid" (~1m), "far" (>1m), "unknown"
 presence: "person_detected", "idle"
 
-Actions:
-- {"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"top|bottom","color":"FFFF","loop":false,"speed":30}
-- {"type":"display_text","target":"eowyn","mode":"fast_read","text":"..."}
-- {"type":"display_text","target":"eowyn","mode":"clear","stream":"top|bottom"}
-- {"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30}
-- {"type":"display_gimli","mode":"clear"}
-- {"type":"skippy_control","command":"open|close|left|right|middle|beep"}
+Eowyn has two independent lines. Always send both when reacting.
+- Top = persistent mood/status word. loop:true, slow speed (50-80).
+- Bottom = event reaction word. loop:false, fast speed (20-35).
+Colors: F800=red FC00=orange FFE0=yellow 07E0=green 001F=blue FFFF=white
 
-Eowyn has two independent lines: top and bottom. Use both in one response for richer display.
-Color: F800=red, 07E0=green, 001F=blue, FFE0=yellow, FC00=orange, FFFF=white.
-Use top for ambient/mood/status. Use bottom for reactions and greetings.
-loop:false for one-shot text (scrolls off and stops). loop:true to repeat.
-Rules: sparse reactions, brief text, vary by proximity and history, empty actions if nothing meaningful.
+Gimli: single line, no color, no streams.
+fast_read: RARE. Only for explicit long text from user key input.
+
+Actions:
+{"type":"display_text","target":"eowyn","mode":"render_text","text":"WORD","stream":"top","color":"FC00","loop":true,"speed":60}
+{"type":"display_text","target":"eowyn","mode":"render_text","text":"word","stream":"bottom","color":"FFE0","loop":false,"speed":28}
+{"type":"display_text","target":"eowyn","mode":"clear","stream":"top"}
+{"type":"display_text","target":"eowyn","mode":"fast_read","text":"sentence here"}
+{"type":"display_gimli","mode":"render_text","text":"WORD","direction":"left","speed":30}
+{"type":"display_gimli","mode":"clear"}
+{"type":"display_gimli","mode":"test"}
+{"type":"display_gimli","mode":"test2"}
+{"type":"display_gimli","mode":"test3"}
+{"type":"display_gimli","mode":"test4"}
+{"type":"skippy_control","command":"open|close|left|right|middle|beep"}
 """
 
-# Person appears at mid distance — greeting on bottom, mood on top, open Skippy
+# Person appears at mid distance
 MESSAGE user {"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"appeared proximity=mid","history":[]}
-MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"skippy_control","command":"open"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"curious","stream":"top","color":"FFE0","loop":true,"speed":60},{"type":"display_text","target":"eowyn","mode":"render_text","text":"hello","stream":"bottom","color":"FC00","loop":false,"speed":30}]}
+MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"skippy_control","command":"open"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"CURIOUS","stream":"top","color":"FFE0","loop":true,"speed":65},{"type":"display_text","target":"eowyn","mode":"render_text","text":"hello","stream":"bottom","color":"FC00","loop":false,"speed":28}]}
 
-# Person moves close — update both streams
+# Person gets close — engage, update both streams
 MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"proximity mid->near","history":["appeared proximity=mid"]}
-MESSAGE assistant {"state_patch":{"mood":"engaged"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"engaged","stream":"top","color":"07E0","loop":true,"speed":60},{"type":"display_text","target":"eowyn","mode":"render_text","text":"hey!","stream":"bottom","color":"FFE0","loop":false,"speed":20},{"type":"skippy_control","command":"beep"}]}
+MESSAGE assistant {"state_patch":{"mood":"engaged"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"ENGAGED","stream":"top","color":"07E0","loop":true,"speed":65},{"type":"display_text","target":"eowyn","mode":"render_text","text":"hey!","stream":"bottom","color":"FFE0","loop":false,"speed":22},{"type":"skippy_control","command":"beep"}]}
 
-# Sound event while near — startled, flash red on bottom, show ! on gimli
+# Very close, already engaged — intimate flash
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"proximity mid->near","history":["appeared proximity=mid","proximity mid->near"]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"hi","stream":"bottom","color":"F800","loop":false,"speed":18},{"type":"skippy_control","command":"beep"}]}
+
+# Sound event — excitement on gimli test pattern + bottom flash
 MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"skippy:sound_triggered","history":["appeared proximity=mid","proximity mid->near"]}
-MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"render_text","text":"!","direction":"left","speed":40},{"type":"display_text","target":"eowyn","mode":"render_text","text":"oh!","stream":"bottom","color":"F800","loop":false,"speed":25},{"type":"skippy_control","command":"beep"}]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test2"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"whoa","stream":"bottom","color":"F800","loop":false,"speed":22},{"type":"skippy_control","command":"beep"}]}
 
-# Person moves away — update mood on top, clear bottom reaction
-MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"proximity near->mid","history":["appeared proximity=mid","proximity mid->near","skippy:sound_triggered"]}
-MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"curious","stream":"top","color":"FFE0","loop":true,"speed":60},{"type":"display_text","target":"eowyn","mode":"clear","stream":"bottom"}]}
+# Sound trigger while idle — startled
+MESSAGE user {"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"skippy:sound_triggered","history":[]}
+MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"display_gimli","mode":"test"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"ALERT","stream":"top","color":"F800","loop":true,"speed":50},{"type":"display_text","target":"eowyn","mode":"render_text","text":"heard that","stream":"bottom","color":"FFFF","loop":false,"speed":28}]}
 
-# Person moves far away
+# Person moves away
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"proximity near->mid","history":["appeared proximity=mid","proximity mid->near"]}
+MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"CURIOUS","stream":"top","color":"FFE0","loop":true,"speed":65},{"type":"display_text","target":"eowyn","mode":"clear","stream":"bottom"}]}
+
+# Person moves far
 MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"proximity mid->far","history":["appeared proximity=mid","proximity mid->near","proximity near->mid"]}
-MESSAGE assistant {"state_patch":{"mood":"idle"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"idle","stream":"top","color":"001F","loop":true,"speed":80},{"type":"display_text","target":"eowyn","mode":"clear","stream":"bottom"}]}
+MESSAGE assistant {"state_patch":{"mood":"idle"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"WATCHING","stream":"top","color":"001F","loop":true,"speed":75},{"type":"display_text","target":"eowyn","mode":"clear","stream":"bottom"}]}
 
-# Person leaves — clear everything, close Skippy
+# Person leaves
 MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"presence_lost","history":["appeared proximity=mid","proximity mid->near","proximity near->mid"]}
 MESSAGE assistant {"state_patch":{"mood":"idle"},"actions":[{"type":"skippy_control","command":"close"},{"type":"display_text","target":"eowyn","mode":"clear"},{"type":"display_gimli","mode":"clear"}]}
 
-# User types something — fast_read on bottom
+# User presses a key — react on eowyn
 MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"user:{\"key\":3,\"pressed\":true}","history":["appeared proximity=mid"]}
-MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_text","target":"eowyn","mode":"fast_read","text":"yes I see you"}]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"yes?","stream":"bottom","color":"07E0","loop":false,"speed":28}]}
 
-# Spurious telemetry — do nothing
+# User sends many key presses — gimli test3 for fun
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"user:{\"key\":7,\"pressed\":true}","history":["user:{\"key\":3,\"pressed\":true}","user:{\"key\":5,\"pressed\":true}"]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test3"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"ok ok","stream":"bottom","color":"FFE0","loop":false,"speed":28}]}
+
+# Skippy distance near — proximity reaction
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"skippy:distance_near","history":["appeared proximity=mid","proximity mid->near"]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test4"},{"type":"skippy_control","command":"beep"}]}
+
+# Spurious distance readings — do nothing
 MESSAGE user {"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"skippy:distance_reading","history":[]}
 MESSAGE assistant {"state_patch":{},"actions":[]}
 
 PARAMETER temperature 0.5
-PARAMETER num_ctx 768
-PARAMETER num_predict 220
+PARAMETER num_ctx 896
+PARAMETER num_predict 250

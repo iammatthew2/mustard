@@ -47,15 +47,23 @@ SYSTEM_MESSAGE = (
     "You control robots and displays in a room. "
     'Input JSON: {"state":{"mood":"...","presence":"...","proximity":"..."},"event":"...","history":[...]}. '
     'Output ONLY JSON: {"state_patch":{},"actions":[]}. '
-    "Actions: "
-    '{"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"top|bottom","color":"FFFF","loop":false,"static_left":false,"speed":30} '
-    '{"type":"display_text","target":"eowyn","mode":"fast_read","text":"..."} '
-    '{"type":"display_text","target":"eowyn","mode":"clear","stream":"top|bottom"} '
-    '{"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30} '
+    "Eowyn (64x32 LED, two independent lines): "
+    '{"type":"display_text","target":"eowyn","mode":"render_text","text":"WORD","stream":"top","color":"FC00","loop":true,"speed":60} '
+    '{"type":"display_text","target":"eowyn","mode":"render_text","text":"reaction","stream":"bottom","color":"FFE0","loop":false,"speed":30} '
+    '{"type":"display_text","target":"eowyn","mode":"clear","stream":"top"} '
+    "fast_read is RARE — only for intentional long-form user messages: "
+    '{"type":"display_text","target":"eowyn","mode":"fast_read","text":"full sentence here"} '
+    "Gimli (32x16 LED, single line, no color, no streams): "
+    '{"type":"display_gimli","mode":"render_text","text":"WORD","direction":"left","speed":30} '
+    '{"type":"display_gimli","mode":"clear"} '
+    '{"type":"display_gimli","mode":"test"} '
+    '{"type":"display_gimli","mode":"test2"} '
+    "Skippy: "
     '{"type":"skippy_control","command":"open|close|left|right|middle|beep"} '
-    "Color hints: F800=red, 07E0=green, 001F=blue, FFE0=yellow, FC00=orange, FFFF=white. "
-    "Use top stream for ambient/status, bottom for reactions. loop:false for one-shot text. "
-    "React with personality. Vary by proximity and history. Be sparse."
+    "Colors: F800=red FC00=orange FFE0=yellow 07E0=green 001F=blue FFFF=white. "
+    "Top stream = persistent mood word (loop:true, slow speed). "
+    "Bottom stream = event reaction word (loop:false, fast speed). "
+    "Be very sparse. Prefer render_text. Use gimli test modes for excitement/sound events."
 )
 
 brain_executor = ThreadPoolExecutor(max_workers=1)
@@ -230,6 +238,11 @@ def dispatch_actions(client: mqtt.Client, actions: list[dict[str, Any]]) -> None
             continue
         t = action.get("type")
         if t == "display_text":
+            if action.get("mode") == "fast_read":
+                # alert before fast_read: gimli flash + beep
+                publish_json(client, GIMLI_TOPIC, {"event": "render_text", "text": ">>>", "direction": "left", "speed": 25})
+                publish_skippy_control(client, {"command": "beep"})
+                time.sleep(0.4)
             publish_display_text(client, action)
         elif t == "display_gimli":
             publish_display_gimli(client, action)
@@ -344,6 +357,8 @@ def summarize_event(topic: str, payload: Any) -> str | None:
         return f"skippy:{event_name}"
 
     if topic == "apps/yodel/control":
+        if not isinstance(payload, dict):
+            return None  # ignore encoder strings (enc1-yodel-right etc.)
         return f"user:{json.dumps(payload, separators=(',', ':'))}"
 
     return f"{topic}:{payload}"

@@ -81,6 +81,16 @@ _current_proximity = "unknown"
 _mqtt_client: mqtt.Client | None = None
 _presence_timer: threading.Timer | None = None
 
+_MOOD_COLORS: dict[str, str] = {
+    "idle": "001F",
+    "curious": "FFE0",
+    "engaged": "07E0",
+    "watching": "FC00",
+    "alert": "F800",
+    "excited": "F800",
+}
+_last_top_word: str = ""
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -124,6 +134,28 @@ def record_event(label: str) -> None:
 
 def emit_thinking(client: mqtt.Client) -> None:
     publish_json(client, GIMLI_TOPIC, {"event": "render_text", "text": "...", "direction": "left", "speed": 60})
+
+
+def push_top_stream(client: mqtt.Client) -> None:
+    """Deterministically mirror current mood to Eowyn top stream."""
+    global _last_top_word
+    with _lock:
+        mood = _state.get("mood", "idle")
+    word = mood.upper()
+    if word == _last_top_word:
+        return
+    _last_top_word = word
+    color = _MOOD_COLORS.get(mood.lower(), "FFFF")
+    publish_json(client, DISPLAY_TOPIC, {
+        "event": "render_text",
+        "text": word,
+        "stream": "top",
+        "direction": "left",
+        "speed": 65,
+        "loop": True,
+        "color": color,
+    })
+    last_publish_at[f"{DISPLAY_TOPIC}:top"] = time.time()
 
 
 # ── brain ─────────────────────────────────────────────────────────────────────
@@ -271,6 +303,7 @@ def enqueue_brain_call(client: mqtt.Client, event_label: str) -> None:
                 patch, actions = ask_brain(current)
                 with _lock:
                     _state.update(patch)
+                push_top_stream(client)
             except Exception as exc:
                 print(f"Brain error: {exc}")
                 actions = []
@@ -306,6 +339,7 @@ def on_presence_lost() -> None:
     label = "presence_lost"
     print(f"Presence timeout → {label}")
     if _mqtt_client is not None:
+        push_top_stream(_mqtt_client)
         enqueue_brain_call(_mqtt_client, label)
 
 
@@ -374,6 +408,8 @@ def on_message(client: mqtt.Client, _u: Any, msg: mqtt.MQTTMessage) -> None:
 
     print(f"Event: {topic} -> {payload}")
     enqueue_brain_call(client, label)
+    if label.startswith("appeared"):
+        push_top_stream(client)
 
 
 # ── main ──────────────────────────────────────────────────────────────────────

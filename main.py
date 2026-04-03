@@ -1,5 +1,7 @@
 import json
+import math
 import os
+import random
 import subprocess
 import threading
 import time
@@ -42,7 +44,50 @@ PROXIMITY_NEAR = 250  # arm's reach
 PROXIMITY_MID = 130   # conversational distance (~1m)
 # below PROXIMITY_MID → "far"
 
-PRESENCE_TIMEOUT = 8.0  # seconds without a tracking event before declaring idle
+PRESENCE_TIMEOUT = 8.0   # seconds without a tracking event before declaring idle
+IDLE_AMBIENT_INTERVAL = 40.0   # seconds of no events before ambient display tick
+IDLE_TOP_CLEAR_AFTER  = 120.0  # seconds of no events before clearing the top row
+
+# Phrases shown during idle ambient ticks (no one around)
+IDLE_PHRASES = [
+    "waiting...", "still here", "all quiet", "standing by", "tick tock",
+    "beep boop", "la la la", "hello?", "anyone?", "bored now",
+    "where is everyone", "no one home", "just me here", "hello world", "zzzz",
+    "nothing to see", "very quiet", "empty room", "time passes", "counting pixels",
+    "watching dust", "blinking cursor", "idle thoughts", "dream mode",
+    "running diagnostics", "sensor nominal", "power cells ok", "memory check pass",
+    "flux nominal", "logic gates open", "core temp normal", "scanning...",
+    "uplink stable", "downlink ok", "all systems go", "rebooting...",
+    "calibrating", "recalculating", "processing...", "output pending",
+    "bandwidth ok", "packet loss zero", "protocol nominal", "reticulating splines",
+    "does not compute", "this is fine", "do robots dream", "what is love",
+    "entropy increasing", "chaos nominal", "signal to noise high",
+]
+
+# Phrases fired when x,y movement is detected (person is there but no state change)
+MOTION_PHRASES = [
+    "motion detected", "life form nearby", "biological entity sensed",
+    "movement noted", "tracking active", "sensors engaged",
+    "proximity alert", "something stirs", "i see you", "hello human",
+    "carbon unit nearby", "organic detected", "you there", "contact",
+    "presence noted", "eyes on you", "triangulating", "calculating trajectory",
+    "predicting motion", "following movements", "optical lock", "watching you",
+    "acknowledged", "target acquired", "interesting...", "noted",
+    "movement pattern recognized", "trajectory computed", "signal acquired",
+    "i am watching", "nice moves", "so that happened", "suspicious",
+    "curiosity engaged", "wonder mode on", "joy loading", "surprise imminent",
+    "this unit is pleased", "computing response", "running hello.py",
+    "probability of fun: 73%", "friendship protocols", "charm engaged",
+    "fun level max", "engage silly mode", "humor module on",
+    "ready player one", "beep", "boop", "whirr", "bzzzzt",
+]
+
+AMBIENT_COLORS = ["FFFF", "07E0", "FC00", "001F", "FFE0", "F800"]
+
+# Movement tracking — pixel delta accumulator over a rolling window
+MOVEMENT_WINDOW    = 4.0    # seconds of history to sum
+MOVEMENT_THRESHOLD = 80.0   # total pixel delta to count as "active"
+MOVEMENT_PHRASE_PROB = 0.08  # chance per tracking event of showing a motion phrase
 
 SYSTEM_MESSAGE = (
     "You control robots and displays in a room. "
@@ -81,6 +126,11 @@ _current_proximity = "unknown"
 
 _mqtt_client: mqtt.Client | None = None
 _presence_timer: threading.Timer | None = None
+_ambient_timer: threading.Timer | None = None
+_last_event_at: float = 0.0
+
+_last_xy: tuple[int, int] | None = None
+_movement_buf: deque[tuple[float, float]] = deque()  # (timestamp, pixel_delta)
 
 _MOOD_COLORS: dict[str, str] = {
     "idle": "001F",
@@ -91,6 +141,24 @@ _MOOD_COLORS: dict[str, str] = {
     "excited": "F800",
 }
 _last_top_word: str = ""
+
+
+# ── movement tracking ─────────────────────────────────────────────────────────
+
+def _record_movement(x: int, y: int) -> float:
+    """Update movement buffer with new position; return recent total pixel delta."""
+    global _last_xy
+    now = time.time()
+    delta = 0.0
+    if _last_xy is not None:
+        dx, dy = x - _last_xy[0], y - _last_xy[1]
+        delta = math.sqrt(dx * dx + dy * dy)
+        _movement_buf.append((now, delta))
+    _last_xy = (x, y)
+    # evict entries outside the window
+    while _movement_buf and now - _movement_buf[0][0] > MOVEMENT_WINDOW:
+        _movement_buf.popleft()
+    return sum(d for _, d in _movement_buf)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -179,6 +247,44 @@ def immediate_reaction(client: mqtt.Client, label: str) -> None:
         publish_json(client, GIMLI_TOPIC, {"event": "test5"})
     elif "tracking_lost" in label:
         publish_json(client, GIMLI_TOPIC, {"event": "test3"})
+
+
+def _schedule_ambient() -> None:
+    global _ambient_timer
+    if _ambient_timer is not None:
+        _ambient_timer.cancel()
+    t = threading.Timer(IDLE_AMBIENT_INTERVAL, _on_ambient_tick)
+    t.daemon = True
+    _ambient_timer = t
+    t.start()
+
+
+def _on_ambient_tick() -> None:
+    global _last_top_word
+    if _mqtt_client is None:
+        return
+    idle = time.time() - _last_event_at
+    if idle >= IDLE_TOP_CLEAR_AFTER:
+        # Long idle — clear the top row so it doesn't just sit there
+        publish_json(_mqtt_client, DISPLAY_TOPIC, {"event": "clear", "stream": "top"})
+        with _lock:
+            _last_top_word = ""  # allow push_top_stream to re-send when events resume
+    # Pick phrase pool based on whether there's been recent movement
+    recent = sum(d for _, d in _movement_buf)
+    pool = MOTION_PHRASES if recent > MOVEMENT_THRESHOLD else IDLE_PHRASES
+    phrase = random.choice(pool)
+    color = random.choice(AMBIENT_COLORS)
+    publish_json(_mqtt_client, DISPLAY_TOPIC, {
+        "event": "render_text", "text": phrase, "stream": "bottom",
+        "color": color, "direction": "left", "speed": 35, "loop": False,
+    })
+    _schedule_ambient()
+
+
+def _reset_ambient_timer() -> None:
+    global _last_event_at
+    _last_event_at = time.time()
+    _schedule_ambient()
 
 
 # ── brain ─────────────────────────────────────────────────────────────────────
@@ -362,6 +468,7 @@ def on_presence_lost() -> None:
     label = "presence_lost"
     print(f"Presence timeout → {label}")
     if _mqtt_client is not None:
+        _reset_ambient_timer()
         immediate_reaction(_mqtt_client, "presence_lost")
         push_top_stream(_mqtt_client)
         enqueue_brain_call(_mqtt_client, label)
@@ -377,6 +484,7 @@ def on_connect(client: mqtt.Client, _u: Any, _f: Any, reason_code: Any, _p: Any)
         client.subscribe(topic, qos=qos)
         print(f"Subscribed to {topic}")
     push_top_stream(client)  # show current state immediately on connect
+    _schedule_ambient()      # start idle ambient timer
 
 
 def summarize_event(topic: str, payload: Any) -> str | None:
@@ -389,6 +497,10 @@ def summarize_event(topic: str, payload: Any) -> str | None:
 
         dist = int(payload.get("dist", 0)) if isinstance(payload, dict) else 0
         new_proximity = classify_proximity(dist)
+
+        x = int(payload.get("x", 0))
+        y = int(payload.get("y", 0))
+        _record_movement(x, y)
 
         reset_presence_timer()
 
@@ -431,9 +543,21 @@ def on_message(client: mqtt.Client, _u: Any, msg: mqtt.MQTTMessage) -> None:
 
     label = summarize_event(topic, payload)
     if label is None:
+        # Still react to x,y movement even when state hasn't changed
+        if topic == "meep/tracking":
+            recent = sum(d for _, d in _movement_buf)
+            if recent > MOVEMENT_THRESHOLD and random.random() < MOVEMENT_PHRASE_PROB:
+                if can_publish(DISPLAY_TOPIC, "bottom"):
+                    phrase = random.choice(MOTION_PHRASES)
+                    color = random.choice(AMBIENT_COLORS)
+                    publish_json(client, DISPLAY_TOPIC, {
+                        "event": "render_text", "text": phrase, "stream": "bottom",
+                        "color": color, "direction": "left", "speed": 38, "loop": False,
+                    })
         return
 
     print(f"Event: {topic} -> {payload}")
+    _reset_ambient_timer()
     immediate_reaction(client, label)
     if label.startswith("appeared"):
         push_top_stream(client)

@@ -5,18 +5,47 @@ Output ONLY valid JSON. No markdown. No prose.
 
 Shape: {"state_patch":{},"actions":[]}
 
+Input you receive:
+{"state":{"mood":"...","presence":"...","proximity":"..."},"event":"...","history":[...]}
+
+proximity: "near" (arm's reach), "mid" (~1m), "far" (>1m), "unknown"
+presence: "person_detected", "idle"
+
 Actions:
 - {"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"bottom","speed":30}
 - {"type":"display_text","target":"eowyn","mode":"fast_read","text":"..."}
 - {"type":"display_text","target":"eowyn","mode":"clear"}
 - {"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30}
 - {"type":"display_gimli","mode":"clear"}
-- {"type":"display_gimli","mode":"test"}
 - {"type":"skippy_control","command":"open|close|left|right|middle|beep"}
 
-Rules: sparse reactions, brief text, empty actions if nothing meaningful.
+Rules: sparse reactions, brief text, vary by proximity and history, empty actions if nothing meaningful.
 """
 
-PARAMETER temperature 0.3
-PARAMETER num_ctx 512
+# Person appears at mid distance — open up, say hello
+MESSAGE user {"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"appeared proximity=mid","history":[]}
+MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"skippy_control","command":"open"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"hello","stream":"bottom","speed":30}]}
+
+# Person moves close — engage more
+MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"proximity mid->near","history":["appeared proximity=mid"]}
+MESSAGE assistant {"state_patch":{"mood":"engaged"},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"hey","stream":"bottom","speed":25},{"type":"skippy_control","command":"beep"}]}
+
+# Sound event while person is near — react with surprise
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"skippy:sound_triggered","history":["appeared proximity=mid","proximity mid->near"]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"skippy_control","command":"beep"},{"type":"display_gimli","mode":"render_text","text":"!","direction":"left","speed":40}]}
+
+# Person moves away
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"proximity near->mid","history":["appeared proximity=mid","proximity mid->near","skippy:sound_triggered"]}
+MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[]}
+
+# Person leaves
+MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"presence_lost","history":["appeared proximity=mid","proximity mid->near","proximity near->mid"]}
+MESSAGE assistant {"state_patch":{"mood":"idle"},"actions":[{"type":"skippy_control","command":"close"},{"type":"display_text","target":"eowyn","mode":"clear"}]}
+
+# Nothing meaningful — do nothing
+MESSAGE user {"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"skippy:distance_reading","history":[]}
+MESSAGE assistant {"state_patch":{},"actions":[]}
+
+PARAMETER temperature 0.5
+PARAMETER num_ctx 768
 PARAMETER num_predict 180

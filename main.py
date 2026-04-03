@@ -2,6 +2,7 @@ import json
 import os
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -35,23 +36,38 @@ DISPLAY_MODES = {"render_text", "fast_read", "clear"}
 GIMLI_MODES = {"render_text", "clear", "test", "test2", "test3", "test4"}
 SKIPPY_COMMANDS = {"open", "close", "left", "right", "middle", "beep"}
 
+# Face bounding-box width thresholds (dist field; larger = closer to camera)
+PROXIMITY_NEAR = 250  # arm's reach
+PROXIMITY_MID = 130   # conversational distance (~1m)
+# below PROXIMITY_MID → "far"
+
+PRESENCE_TIMEOUT = 8.0  # seconds without a tracking event before declaring idle
+
 SYSTEM_MESSAGE = (
     "You control robots and displays in a room. "
+    'Input JSON: {"state":{"mood":"...","presence":"...","proximity":"..."},"event":"...","history":[...]}. '
     'Output ONLY JSON: {"state_patch":{},"actions":[]}. '
     "Actions: "
     '{"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"bottom","speed":30} '
     '{"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30} '
     '{"type":"skippy_control","command":"open|close|left|right|middle|beep"} '
-    "React with personality. Be sparse. Empty actions if nothing meaningful."
+    "React with personality. Vary reactions by proximity and history. Be sparse. Empty actions if nothing meaningful."
 )
 
 brain_executor = ThreadPoolExecutor(max_workers=1)
 last_publish_at: dict[str, float] = {}
-presence = "idle"  # tracks person_detected vs idle to avoid spamming meep events
-ollama_client = ollama.Client()  # persistent — reuses HTTP connection to localhost:11434
+ollama_client = ollama.Client()
 
 _lock = threading.Lock()
 _queue: dict[str, Any] = {"processing": False, "pending": None}
+
+# Persistent state — updated by state_patch from each brain response
+_state: dict[str, Any] = {"mood": "idle", "presence": "idle", "proximity": "unknown"}
+_history: deque[str] = deque(maxlen=5)
+_current_proximity = "unknown"
+
+_mqtt_client: mqtt.Client | None = None
+_presence_timer: threading.Timer | None = None
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -74,43 +90,57 @@ def can_publish(topic: str) -> bool:
     return True
 
 
+def classify_proximity(dist: int) -> str:
+    if dist >= PROXIMITY_NEAR:
+        return "near"
+    elif dist >= PROXIMITY_MID:
+        return "mid"
+    return "far"
+
+
+def build_prompt(event_label: str) -> str:
+    with _lock:
+        snapshot = {"state": dict(_state), "event": event_label, "history": list(_history)}
+    return json.dumps(snapshot, separators=(",", ":"))
+
+
+def record_event(label: str) -> None:
+    with _lock:
+        _history.append(label)
+
+
 def emit_thinking(client: mqtt.Client) -> None:
-    """Clear gimli and show processing indicator."""
-    print(f"[emit_thinking] clearing gimli")
-    publish_json(client, GIMLI_TOPIC, {"event": "clear"})
-    print(f"[emit_thinking] showing ======= on gimli")
-    publish_json(
-        client,
-        GIMLI_TOPIC,
-        {"event": "render_text", "text": "=======", "direction": "left", "speed": 80},
-    )
-
-
-def extract_actions(text: str) -> list[dict[str, Any]]:
-    text = text.strip()
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1:
-        return []
-    try:
-        obj = json.loads(text[start:end + 1])
-        actions = obj.get("actions", [])
-        if isinstance(actions, dict):
-            return [actions]
-        return actions if isinstance(actions, list) else []
-    except json.JSONDecodeError:
-        return []
+    publish_json(client, GIMLI_TOPIC, {"event": "render_text", "text": "...", "direction": "left", "speed": 60})
 
 
 # ── brain ─────────────────────────────────────────────────────────────────────
 
-def ask_brain(event_summary: str) -> list[dict[str, Any]]:
+def extract_response(text: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    text = text.strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1:
+        return {}, []
+    try:
+        obj = json.loads(text[start : end + 1])
+        patch = obj.get("state_patch", {})
+        if not isinstance(patch, dict):
+            patch = {}
+        actions = obj.get("actions", [])
+        if isinstance(actions, dict):
+            actions = [actions]
+        return patch, actions if isinstance(actions, list) else []
+    except json.JSONDecodeError:
+        return {}, []
+
+
+def ask_brain(prompt: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     t0 = time.time()
     response = ollama_client.chat(
         model=OLLAMA_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_MESSAGE},
-            {"role": "user", "content": event_summary},
+            {"role": "user", "content": prompt},
         ],
         stream=False,
         keep_alive=-1,
@@ -118,9 +148,9 @@ def ask_brain(event_summary: str) -> list[dict[str, Any]]:
     )
     elapsed = time.time() - t0
     content = response["message"]["content"]
-    actions = extract_actions(content)
-    print(f"[timing] ollama={elapsed:.2f}s actions={actions}")
-    return actions
+    patch, actions = extract_response(content)
+    print(f"[timing] ollama={elapsed:.2f}s patch={patch} actions={actions}")
+    return patch, actions
 
 
 # ── publishers ────────────────────────────────────────────────────────────────
@@ -199,6 +229,65 @@ def dispatch_actions(client: mqtt.Client, actions: list[dict[str, Any]]) -> None
             publish_skippy_control(client, action)
 
 
+# ── event routing ─────────────────────────────────────────────────────────────
+
+def enqueue_brain_call(client: mqtt.Client, event_label: str) -> None:
+    prompt = build_prompt(event_label)
+    record_event(event_label)
+
+    with _lock:
+        if _queue["processing"]:
+            _queue["pending"] = prompt  # latest wins, drop stale
+            return
+        _queue["processing"] = True
+
+    emit_thinking(client)
+
+    def run() -> None:
+        current = prompt
+        while True:
+            try:
+                patch, actions = ask_brain(current)
+                with _lock:
+                    _state.update(patch)
+            except Exception as exc:
+                print(f"Brain error: {exc}")
+                actions = []
+            dispatch_actions(client, actions)
+            with _lock:
+                next_prompt = _queue["pending"]
+                if next_prompt is None:
+                    _queue["processing"] = False
+                    break
+                _queue["pending"] = None
+                current = next_prompt
+            emit_thinking(client)
+
+    brain_executor.submit(run)
+
+
+def reset_presence_timer() -> None:
+    global _presence_timer
+    if _presence_timer is not None:
+        _presence_timer.cancel()
+    t = threading.Timer(PRESENCE_TIMEOUT, on_presence_lost)
+    t.daemon = True
+    _presence_timer = t
+    t.start()
+
+
+def on_presence_lost() -> None:
+    global _current_proximity
+    with _lock:
+        _state["presence"] = "idle"
+        _state["proximity"] = "unknown"
+        _current_proximity = "unknown"
+    label = "presence_lost"
+    print(f"Presence timeout → {label}")
+    if _mqtt_client is not None:
+        enqueue_brain_call(_mqtt_client, label)
+
+
 # ── MQTT callbacks ────────────────────────────────────────────────────────────
 
 def on_connect(client: mqtt.Client, _u: Any, _f: Any, reason_code: Any, _p: Any) -> None:
@@ -211,25 +300,43 @@ def on_connect(client: mqtt.Client, _u: Any, _f: Any, reason_code: Any, _p: Any)
 
 
 def summarize_event(topic: str, payload: Any) -> str | None:
-    """Build the compact prompt string sent to the LLM."""
-    global presence
+    global _current_proximity
 
-    # meep/tracking fires constantly; only pass to brain on presence state change
     if topic == "meep/tracking":
-        new_presence = "person_detected" if (
-            isinstance(payload, dict) and payload.get("active")
-        ) else "idle"
-        if new_presence == presence:
-            return None
-        presence = new_presence
-        return f"presence changed to {presence}"
+        active = isinstance(payload, dict) and bool(payload.get("active"))
+        if not active:
+            return None  # spurious; timeout handles real departures
+
+        dist = int(payload.get("dist", 0)) if isinstance(payload, dict) else 0
+        new_proximity = classify_proximity(dist)
+
+        reset_presence_timer()
+
+        with _lock:
+            was_idle = _state.get("presence") == "idle"
+            old_proximity = _current_proximity
+
+        if was_idle:
+            with _lock:
+                _state["presence"] = "person_detected"
+                _state["proximity"] = new_proximity
+                _current_proximity = new_proximity
+            return f"appeared proximity={new_proximity}"
+
+        if new_proximity != old_proximity:
+            with _lock:
+                _state["proximity"] = new_proximity
+                _current_proximity = new_proximity
+            return f"proximity {old_proximity}->{new_proximity}"
+
+        return None
 
     if topic == "apps/skippy/events":
-        event_name = payload.get("event", "unknown") if isinstance(payload, dict) else payload
+        event_name = payload.get("event", "unknown") if isinstance(payload, dict) else str(payload)
         return f"skippy:{event_name}"
 
     if topic == "apps/yodel/control":
-        return f"user input:{json.dumps(payload, separators=(',', ':'))}"
+        return f"user:{json.dumps(payload, separators=(',', ':'))}"
 
     return f"{topic}:{payload}"
 
@@ -238,39 +345,12 @@ def on_message(client: mqtt.Client, _u: Any, msg: mqtt.MQTTMessage) -> None:
     payload = decode_payload(msg.payload)
     topic = msg.topic
 
-    summary = summarize_event(topic, payload)
-    if summary is None:
+    label = summarize_event(topic, payload)
+    if label is None:
         return
 
     print(f"Event: {topic} -> {payload}")
-
-    with _lock:
-        if _queue["processing"]:
-            _queue["pending"] = summary  # latest wins, drop stale
-            return
-        _queue["processing"] = True
-
-    emit_thinking(client)
-
-    def run() -> None:
-        current = summary
-        while True:
-            try:
-                actions = ask_brain(current)
-            except Exception as exc:
-                print(f"Brain error: {exc}")
-                actions = []
-            dispatch_actions(client, actions)
-            with _lock:
-                next_summary = _queue["pending"]
-                if next_summary is None:
-                    _queue["processing"] = False
-                    break
-                _queue["pending"] = None
-                current = next_summary
-            emit_thinking(client)
-
-    brain_executor.submit(run)
+    enqueue_brain_call(client, label)
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -282,7 +362,7 @@ def warmup_model() -> None:
             model=OLLAMA_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_MESSAGE},
-                {"role": "user", "content": "idle"},
+                {"role": "user", "content": '{"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"startup","history":[]}'},
             ],
             stream=False,
             keep_alive=-1,
@@ -294,8 +374,10 @@ def warmup_model() -> None:
 
 
 def main() -> None:
+    global _mqtt_client
     warmup_model()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID)
+    _mqtt_client = client
     client.on_connect = on_connect
     client.on_message = on_message
     print(f"Connecting to MQTT broker {MQTT_BROKER}:{MQTT_PORT}")

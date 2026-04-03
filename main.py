@@ -48,10 +48,14 @@ SYSTEM_MESSAGE = (
     'Input JSON: {"state":{"mood":"...","presence":"...","proximity":"..."},"event":"...","history":[...]}. '
     'Output ONLY JSON: {"state_patch":{},"actions":[]}. '
     "Actions: "
-    '{"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"bottom","speed":30} '
+    '{"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"top|bottom","color":"FFFF","loop":false,"static_left":false,"speed":30} '
+    '{"type":"display_text","target":"eowyn","mode":"fast_read","text":"..."} '
+    '{"type":"display_text","target":"eowyn","mode":"clear","stream":"top|bottom"} '
     '{"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30} '
     '{"type":"skippy_control","command":"open|close|left|right|middle|beep"} '
-    "React with personality. Vary reactions by proximity and history. Be sparse. Empty actions if nothing meaningful."
+    "Color hints: F800=red, 07E0=green, 001F=blue, FFE0=yellow, FC00=orange, FFFF=white. "
+    "Use top stream for ambient/status, bottom for reactions. loop:false for one-shot text. "
+    "React with personality. Vary by proximity and history. Be sparse."
 )
 
 brain_executor = ThreadPoolExecutor(max_workers=1)
@@ -80,13 +84,14 @@ def decode_payload(raw: bytes) -> Any:
         return text
 
 
-def can_publish(topic: str) -> bool:
+def can_publish(topic: str, stream: str | None = None) -> bool:
     cooldown = OUTPUT_COOLDOWNS.get(topic, 0.0)
     now = time.time()
-    last = last_publish_at.get(topic)
+    key = f"{topic}:{stream}" if stream else topic
+    last = last_publish_at.get(key)
     if last is not None and (now - last) < cooldown:
         return False
-    last_publish_at[topic] = now
+    last_publish_at[key] = now
     return True
 
 
@@ -164,9 +169,10 @@ def publish_display_text(client: mqtt.Client, action: dict[str, Any]) -> None:
     if mode not in DISPLAY_MODES:
         return
     payload: dict[str, Any] = {"event": mode}
+    stream = action.get("stream", "bottom") if mode != "fast_read" else "bottom"
     if mode == "clear":
-        if action.get("stream") in {"top", "bottom"}:
-            payload["stream"] = action["stream"]
+        if stream in {"top", "bottom"}:
+            payload["stream"] = stream
     elif mode == "fast_read":
         text = str(action.get("text", "")).strip()
         if not text:
@@ -179,13 +185,15 @@ def publish_display_text(client: mqtt.Client, action: dict[str, Any]) -> None:
         if not text or text == "...":
             return
         payload["text"] = text[:64]
-        payload["stream"] = action.get("stream", "bottom")
+        payload["stream"] = stream
         payload["direction"] = action.get("direction", "left")
         payload["speed"] = int(action.get("speed", 30))
-        payload["loop"] = bool(action.get("loop", True))
+        payload["loop"] = bool(action.get("loop", False))
         if "color" in action:
             payload["color"] = str(action["color"])
-    if not can_publish(DISPLAY_TOPIC):
+        if action.get("static_left"):
+            payload["static_left"] = True
+    if not can_publish(DISPLAY_TOPIC, stream):
         return
     publish_json(client, DISPLAY_TOPIC, payload)
 

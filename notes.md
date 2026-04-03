@@ -21,7 +21,7 @@ Assumptions:
 - repo path: `/home/carol/dev/mustard`
 - Python venv path: `/home/carol/dev/mustard/.venv`
 - MQTT broker: `192.168.8.100:1883`
-- Ollama model name: `meep-brain`
+- Ollama model name: `mustard-brain`
 - main runtime entrypoint: `main.py`
 - display topics: `apps/eowyn/text`, `apps/gimli/text`
 
@@ -34,7 +34,7 @@ From the repo root:
 ```bash
 cd /home/carol/dev/mustard
 source .venv/bin/activate
-ollama create meep-brain -f mustard.mf
+ollama create mustard-brain -f mustard.mf
 python main.py
 ```
 
@@ -95,12 +95,12 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama list
 ```
 
-If `meep-brain` is missing, rebuild it:
+If `mustard-brain` is missing, rebuild it:
 
 ```bash
 cd /home/carol/dev/mustard
-ollama pull gemma3:4b
-ollama create meep-brain -f mustard.mf
+ollama pull qwen2.5:0.5b
+ollama create mustard-brain -f mustard.mf
 ```
 
 ### 5. Confirm MQTT broker is reachable
@@ -119,16 +119,18 @@ If `mosquitto_sub` is not installed, falling back to ping is acceptable.
 
 ## Current Runtime Shape
 
-- [main.py](main.py) subscribes to `meep/tracking` and `apps/skippy/events`
-- It keeps a small rolling state/history in memory
-- Each event is sent to the local Ollama model `meep-brain`
+- [main.py](main.py) subscribes to `meep/tracking`, `apps/skippy/events`, and `apps/yodel/control`
+- Tracking events are bucketed into proximity (`near`/`mid`/`far`) — the brain is called on presence appearance and proximity changes, not every frame
+- An 8-second presence timeout fires a `presence_lost` event when tracking goes silent
+- Persistent state (`mood`, `presence`, `proximity`) is maintained across events and updated by `state_patch` from each brain response
+- Each event sent to `mustard-brain` is a JSON object: `{"state":{...},"event":"...","history":[...]}`
 - The model must return JSON with `state_patch` and `actions`
 - Supported action types are:
-  - `display_text`
+  - `display_text` (target `eowyn`)
   - `display_gimli`
   - `skippy_control`
 
-This is the minimal loop needed to make the LLM feel embodied instead of chat-based.
+This loop gives the brain persistent context so it can build personality arcs across an interaction.
 
 ## Exact Startup Commands
 
@@ -139,8 +141,8 @@ cd /home/carol/dev/mustard
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-ollama pull gemma3:4b
-ollama create meep-brain -f mustard.mf
+ollama pull qwen2.5:0.5b
+ollama create mustard-brain -f mustard.mf
 python main.py
 ```
 
@@ -160,7 +162,7 @@ source .venv/bin/activate
 export MQTT_BROKER=192.168.8.100
 export MQTT_PORT=1883
 export MQTT_CLIENT_ID=mustard-brain
-export OLLAMA_MODEL=meep-brain
+export OLLAMA_MODEL=mustard-brain
 export DISPLAY_TOPIC=apps/eowyn/text
 export GIMLI_TOPIC=apps/gimli/text
 export SKIPPY_CONTROL_TOPIC=apps/skippy/control
@@ -191,8 +193,8 @@ Then make sure the service is running.
 ### 3. Pull the base model and build the local brain model
 
 ```bash
-ollama pull gemma3:4b
-ollama create meep-brain -f mustard.mf
+ollama pull qwen2.5:0.5b
+ollama create mustard-brain -f mustard.mf
 ```
 
 ### 4. Run the brain process
@@ -207,7 +209,7 @@ Optional environment overrides:
 ```bash
 export MQTT_BROKER=192.168.8.100
 export MQTT_PORT=1883
-export OLLAMA_MODEL=meep-brain
+export OLLAMA_MODEL=mustard-brain
 python main.py
 ```
 
@@ -221,12 +223,12 @@ These checks confirm the stack is working, not just installed.
 ollama list
 ```
 
-Expected: `meep-brain` appears in the list.
+Expected: `mustard-brain` appears in the list.
 
 ### 2. Verify the model can answer in the required shape
 
 ```bash
-ollama run meep-brain '{"state":{"presence":"idle"},"event":{"topic":"meep/tracking","payload":{"active":true,"x":320,"y":200,"dist":180}},"allowed_actions":{"display_text":{"target":["eowyn"],"mode":["render_text","fast_read","clear"],"stream":["top","bottom"]},"skippy_control":{"command":["open","close","left","right","middle","beep"]}}}'
+ollama run mustard-brain '{"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"appeared proximity=mid","history":[]}'
 ```
 
 Expected shape:
@@ -387,14 +389,14 @@ curl -fsSL https://ollama.com/install.sh | sh
 
 Symptom:
 
-- `ollama list` does not show `meep-brain`
+- `ollama list` does not show `mustard-brain`
 
 Fix:
 
 ```bash
 cd /home/carol/dev/mustard
-ollama pull gemma3:4b
-ollama create meep-brain -f mustard.mf
+ollama pull qwen2.5:0.5b
+ollama create mustard-brain -f mustard.mf
 ```
 
 ### Python deps missing
@@ -431,9 +433,9 @@ Symptom:
 
 Fix:
 
-- rebuild the model: `ollama create meep-brain -f mustard.mf`
+- rebuild the model: `ollama create mustard-brain -f mustard.mf`
 - tighten examples in `mustard.mf`
-- test with `ollama run meep-brain` directly before restarting `main.py`
+- test with `ollama run mustard-brain` directly before restarting `main.py`
 
 ### Events arrive but nothing happens
 

@@ -1,0 +1,25 @@
+[Unit]
+Description=Mustard MQTT brain
+Wants=network-online.target ollama.service
+After=network-online.target ollama.service
+
+[Service]
+Type=simple
+User=carol
+Group=carol
+WorkingDirectory=/home/carol/dev/mustard
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/carol/dev/mustard/.venv/bin/python /home/carol/dev/mustard/main.py
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=180
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/home/carol/dev/mustard /home/carol/.ollama
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

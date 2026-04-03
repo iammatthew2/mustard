@@ -2,6 +2,7 @@ import json
 import math
 import os
 import random
+import hashlib
 import subprocess
 import threading
 import time
@@ -16,7 +17,8 @@ import paho.mqtt.client as mqtt
 MQTT_BROKER = os.getenv("MQTT_BROKER", "192.168.8.100")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "mustard-brain")
-OLLAMA_MODEL = "mustard-brain"
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mustard-brain")
+MODEL_BUILD_STATE_FILE = os.getenv("MODEL_BUILD_STATE_FILE", ".mustard_model_build.json")
 
 DISPLAY_TOPIC = os.getenv("DISPLAY_TOPIC", "apps/eowyn/text")
 GIMLI_TOPIC = os.getenv("GIMLI_TOPIC", "apps/gimli/text")
@@ -578,6 +580,85 @@ def build_model() -> None:
     print("Model built.")
 
 
+def modelfile_path() -> str:
+    return os.path.join(os.path.dirname(__file__) or ".", "mustard.mf")
+
+
+def build_state_path() -> str:
+    return os.path.join(os.path.dirname(__file__) or ".", MODEL_BUILD_STATE_FILE)
+
+
+def file_sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_build_state() -> dict[str, Any]:
+    path = build_state_path()
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_build_state(modelfile_hash: str) -> None:
+    path = build_state_path()
+    data = {"model": OLLAMA_MODEL, "modelfile_hash": modelfile_hash}
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, separators=(",", ":"))
+    os.replace(tmp, path)
+
+
+def model_exists(name: str) -> bool:
+    result = subprocess.run(
+        ["ollama", "show", name],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def ensure_model() -> None:
+    modelfile = modelfile_path()
+    if not os.path.exists(modelfile):
+        raise RuntimeError(f"Missing modelfile: {modelfile}")
+
+    modelfile_hash = file_sha256(modelfile)
+    state = load_build_state()
+    state_hash = state.get("modelfile_hash")
+    state_model = state.get("model")
+
+    if os.getenv("MUSTARD_FORCE_MODEL_REBUILD", "0") == "1":
+        print("Force rebuild requested via MUSTARD_FORCE_MODEL_REBUILD=1")
+        build_model()
+        save_build_state(modelfile_hash)
+        return
+
+    exists = model_exists(OLLAMA_MODEL)
+    state_matches = state_model == OLLAMA_MODEL and state_hash == modelfile_hash
+    if exists and state_matches:
+        print(f"Model {OLLAMA_MODEL} exists and matches mustard.mf hash.")
+        return
+
+    if not exists:
+        reason = "model missing"
+    elif not state:
+        reason = "build state missing"
+    else:
+        reason = "mustard.mf changed"
+    print(f"Rebuilding {OLLAMA_MODEL} ({reason}).")
+    build_model()
+    save_build_state(modelfile_hash)
+
+
 def warmup_model() -> None:
     print(f"Warming up {OLLAMA_MODEL}...")
     try:
@@ -598,7 +679,7 @@ def warmup_model() -> None:
 
 def main() -> None:
     global _mqtt_client
-    build_model()
+    ensure_model()
     warmup_model()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID)
     _mqtt_client = client

@@ -1,0 +1,1 @@
+{"ts":"2026-03-15 15:05:27","epoch":1773612327.2329297,"marker":"NEW","topic":"apps/skippy/events","payload":"{\"event\":\"distance_reading\",\"distance_cm\":41,\"lid\":350,\"rotation\":300}"}

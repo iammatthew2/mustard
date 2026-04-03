@@ -1,14 +1,22 @@
-FROM gemma3:4b
+FROM qwen2.5:0.5b
 
-# Force logic gate behavior instead of a chatbot
 SYSTEM """
-You are a robot controller. Output ONLY JSON.
-If you decide to move a servo, output the new state.
+Output ONLY valid JSON. No markdown. No prose.
+
+Shape: {"state_patch":{},"actions":[]}
+
+Actions:
+- {"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"bottom","speed":30}
+- {"type":"display_text","target":"eowyn","mode":"fast_read","text":"..."}
+- {"type":"display_text","target":"eowyn","mode":"clear"}
+- {"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30}
+- {"type":"display_gimli","mode":"clear"}
+- {"type":"display_gimli","mode":"test"}
+- {"type":"skippy_control","command":"open|close|left|right|middle|beep"}
+
+Rules: sparse reactions, brief text, empty actions if nothing meaningful.
 """
 
-# help the API know exactly where the JSON ends
-PARAMETER stop "}"
-# Low temperature
-PARAMETER temperature 0.1
-# Small context window
-PARAMETER num_ctx 1024
+PARAMETER temperature 0.3
+PARAMETER num_ctx 512
+PARAMETER num_predict 80

@@ -1,0 +1,44 @@
+{"ts":"2026-03-15 15:05:51","epoch":1773612351.481616,"marker":"NEW","topic":"meep/tracking","payload":"{\"active\": false}"}
+{"ts":"2026-03-15 15:05:52","epoch":1773612352.984893,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 142, \"y\": 172, \"dist\": 196, \"active\": true}"}
+{"ts":"2026-03-15 15:05:53","epoch":1773612353.2854352,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 146, \"y\": 160, \"dist\": 199, \"active\": true}"}
+{"ts":"2026-03-15 15:05:53","epoch":1773612353.59006,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 136, \"y\": 168, \"dist\": 157, \"active\": true}"}
+{"ts":"2026-03-15 15:05:53","epoch":1773612353.777664,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 129, \"y\": 173, \"dist\": 162, \"active\": true}"}
+{"ts":"2026-03-15 15:05:53","epoch":1773612353.9776437,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 120, \"y\": 173, \"dist\": 189, \"active\": true}"}
+{"ts":"2026-03-15 15:05:54","epoch":1773612354.188952,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 113, \"y\": 172, \"dist\": 178, \"active\": true}"}
+{"ts":"2026-03-15 15:05:54","epoch":1773612354.7884028,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 121, \"y\": 174, \"dist\": 167, \"active\": true}"}
+{"ts":"2026-03-15 15:05:54","epoch":1773612354.9861183,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 130, \"y\": 171, \"dist\": 165, \"active\": true}"}
+{"ts":"2026-03-15 15:05:55","epoch":1773612355.489231,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 114, \"y\": 179, \"dist\": 179, \"active\": true}"}
+{"ts":"2026-03-15 15:05:55","epoch":1773612355.8924234,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 122, \"y\": 177, \"dist\": 163, \"active\": true}"}
+{"ts":"2026-03-15 15:05:56","epoch":1773612356.0920563,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 132, \"y\": 174, \"dist\": 181, \"active\": true}"}
+{"ts":"2026-03-15 15:05:56","epoch":1773612356.4891546,"marker":"NEW","topic":"meep/tracking","payload":"{\"active\": false}"}
+{"ts":"2026-03-15 15:05:56","epoch":1773612356.7977617,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 339, \"y\": 177, \"dist\": 179, \"active\": true}"}
+{"ts":"2026-03-15 15:05:56","epoch":1773612356.9891376,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 386, \"y\": 178, \"dist\": 164, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.0889413,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 371, \"y\": 176, \"dist\": 177, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.1903017,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 359, \"y\": 163, \"dist\": 160, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.2936435,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 343, \"y\": 156, \"dist\": 155, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.3865814,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 316, \"y\": 157, \"dist\": 182, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.494313,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 290, \"y\": 153, \"dist\": 177, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.6886601,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 119, \"y\": 281, \"dist\": 437, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.8909097,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 134, \"y\": 182, \"dist\": 173, \"active\": true}"}
+{"ts":"2026-03-15 15:05:57","epoch":1773612357.9934156,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 124, \"y\": 193, \"dist\": 213, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.294765,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 128, \"y\": 186, \"dist\": 187, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.4916105,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 125, \"y\": 218, \"dist\": 434, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.5928314,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 120, \"y\": 239, \"dist\": 470, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.6882956,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 142, \"y\": 214, \"dist\": 232, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.7964501,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 177, \"y\": 197, \"dist\": 191, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.8958917,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 198, \"y\": 180, \"dist\": 179, \"active\": true}"}
+{"ts":"2026-03-15 15:05:58","epoch":1773612358.99408,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 212, \"y\": 169, \"dist\": 182, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.097182,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 220, \"y\": 162, \"dist\": 184, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.2972054,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 210, \"y\": 162, \"dist\": 208, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.3930202,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 197, \"y\": 165, \"dist\": 205, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.497723,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 183, \"y\": 171, \"dist\": 197, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.5954633,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 162, \"y\": 174, \"dist\": 207, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.6947525,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 150, \"y\": 176, \"dist\": 175, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.8002264,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 140, \"y\": 179, \"dist\": 176, \"active\": true}"}
+{"ts":"2026-03-15 15:05:59","epoch":1773612359.8930652,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 133, \"y\": 180, \"dist\": 156, \"active\": true}"}
+{"ts":"2026-03-15 15:06:00","epoch":1773612360.0959811,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 105, \"y\": 203, \"dist\": 182, \"active\": true}"}
+{"ts":"2026-03-15 15:06:00","epoch":1773612360.9001944,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 114, \"y\": 192, \"dist\": 166, \"active\": true}"}
+{"ts":"2026-03-15 15:06:01","epoch":1773612361.5990548,"marker":"NEW","topic":"meep/tracking","payload":"{\"active\": false}"}
+{"ts":"2026-03-15 15:06:01","epoch":1773612361.7017763,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 99, \"y\": 206, \"dist\": 194, \"active\": true}"}
+{"ts":"2026-03-15 15:06:01","epoch":1773612361.8973534,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 110, \"y\": 195, \"dist\": 170, \"active\": true}"}
+{"ts":"2026-03-15 15:06:02","epoch":1773612362.2006762,"marker":"NEW","topic":"meep/tracking","payload":"{\"x\": 105, \"y\": 202, \"dist\": 193, \"active\": true}"}

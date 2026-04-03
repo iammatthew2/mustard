@@ -1,5 +1,7 @@
 # Mustard
 
+This is a WIP
+
 ollama with Gemma 3 4B-it-QAT running on a Raspberry Pi 5, 8gb
 
 Not a chat bot. This agent is the brain of a set of networked devices. It provides personality and interactivity.

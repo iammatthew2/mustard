@@ -30,7 +30,9 @@ Actions:
 {"type":"display_gimli","mode":"test2"}
 {"type":"display_gimli","mode":"test3"}
 {"type":"display_gimli","mode":"test4"}
-{"type":"skippy_control","command":"open|close|left|right|middle|beep"}
+{"type":"display_gimli","mode":"test5"}
+{"type":"skippy_control","command":"beep"}
+target is always "eowyn". Never use other targets.
 """
 
 # Person appears at mid distance
@@ -69,17 +71,17 @@ MESSAGE assistant {"state_patch":{"mood":"idle"},"actions":[{"type":"skippy_cont
 MESSAGE user {"state":{"mood":"curious","presence":"person_detected","proximity":"mid"},"event":"user:{\"key\":3,\"pressed\":true}","history":["appeared proximity=mid"]}
 MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_text","target":"eowyn","mode":"render_text","text":"yes?","stream":"bottom","color":"07E0","loop":false,"speed":28}]}
 
-# User sends many key presses — gimli test3 for fun
+# Skippy acquired a face
+MESSAGE user {"state":{"mood":"curious","presence":"idle","proximity":"unknown"},"event":"skippy:tracking_acquired","history":[]}
+MESSAGE assistant {"state_patch":{"mood":"curious"},"actions":[{"type":"display_gimli","mode":"test5"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"got you","stream":"bottom","color":"07E0","loop":false,"speed":28},{"type":"skippy_control","command":"open"}]}
+
+# Skippy lost a face
+MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"skippy:tracking_lost","history":["skippy:tracking_acquired"]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test3"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"where?","stream":"bottom","color":"FC00","loop":false,"speed":30}]}
+
+# User sends many key presses — gimli flash for fun
 MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"user:{\"key\":7,\"pressed\":true}","history":["user:{\"key\":3,\"pressed\":true}","user:{\"key\":5,\"pressed\":true}"]}
-MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test3"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"ok ok","stream":"bottom","color":"FFE0","loop":false,"speed":28}]}
-
-# Skippy distance near — proximity reaction
-MESSAGE user {"state":{"mood":"engaged","presence":"person_detected","proximity":"near"},"event":"skippy:distance_near","history":["appeared proximity=mid","proximity mid->near"]}
-MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test4"},{"type":"skippy_control","command":"beep"}]}
-
-# Spurious distance readings — do nothing
-MESSAGE user {"state":{"mood":"idle","presence":"idle","proximity":"unknown"},"event":"skippy:distance_reading","history":[]}
-MESSAGE assistant {"state_patch":{},"actions":[]}
+MESSAGE assistant {"state_patch":{},"actions":[{"type":"display_gimli","mode":"test4"},{"type":"display_text","target":"eowyn","mode":"render_text","text":"ok ok","stream":"bottom","color":"FFE0","loop":false,"speed":28}]}
 
 PARAMETER temperature 0.5
 PARAMETER num_ctx 896

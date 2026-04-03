@@ -34,7 +34,7 @@ OUTPUT_COOLDOWNS = {
 }
 
 DISPLAY_MODES = {"render_text", "fast_read", "clear"}
-GIMLI_MODES = {"render_text", "clear", "test", "test2", "test3", "test4"}
+GIMLI_MODES = {"render_text", "clear", "test", "test2", "test3", "test4", "test5"}
 SKIPPY_COMMANDS = {"open", "close", "left", "right", "middle", "beep"}
 
 # Face bounding-box width thresholds (dist field; larger = closer to camera)
@@ -152,11 +152,33 @@ def push_top_stream(client: mqtt.Client) -> None:
         "text": word,
         "stream": "top",
         "direction": "left",
-        "speed": 65,
-        "loop": True,
+        "speed": 40,
+        "loop": False,
+        "static_left": True,
         "color": color,
     })
     last_publish_at[f"{DISPLAY_TOPIC}:top"] = time.time()
+
+
+def immediate_reaction(client: mqtt.Client, label: str) -> None:
+    """Instant output fired before the brain responds (~20s gap filler)."""
+    if label == "presence_lost":
+        client.publish(SKIPPY_CONTROL_TOPIC, "close")
+        publish_json(client, DISPLAY_TOPIC, {"event": "clear", "stream": "bottom"})
+        publish_json(client, GIMLI_TOPIC, {"event": "clear"})
+    elif label.startswith("appeared"):
+        client.publish(SKIPPY_CONTROL_TOPIC, "open")
+        publish_json(client, DISPLAY_TOPIC, {
+            "event": "render_text", "text": "hi", "stream": "bottom",
+            "color": "07E0", "direction": "left", "speed": 28, "loop": False,
+        })
+    elif "sound_triggered" in label:
+        publish_json(client, GIMLI_TOPIC, {"event": "test2"})
+    elif "tracking_acquired" in label:
+        client.publish(SKIPPY_CONTROL_TOPIC, "open")
+        publish_json(client, GIMLI_TOPIC, {"event": "test5"})
+    elif "tracking_lost" in label:
+        publish_json(client, GIMLI_TOPIC, {"event": "test3"})
 
 
 # ── brain ─────────────────────────────────────────────────────────────────────
@@ -340,6 +362,7 @@ def on_presence_lost() -> None:
     label = "presence_lost"
     print(f"Presence timeout → {label}")
     if _mqtt_client is not None:
+        immediate_reaction(_mqtt_client, "presence_lost")
         push_top_stream(_mqtt_client)
         enqueue_brain_call(_mqtt_client, label)
 
@@ -353,6 +376,7 @@ def on_connect(client: mqtt.Client, _u: Any, _f: Any, reason_code: Any, _p: Any)
     for topic, qos in SUBSCRIPTIONS:
         client.subscribe(topic, qos=qos)
         print(f"Subscribed to {topic}")
+    push_top_stream(client)  # show current state immediately on connect
 
 
 def summarize_event(topic: str, payload: Any) -> str | None:
@@ -389,6 +413,8 @@ def summarize_event(topic: str, payload: Any) -> str | None:
 
     if topic == "apps/skippy/events":
         event_name = payload.get("event", "unknown") if isinstance(payload, dict) else str(payload)
+        if event_name == "distance_reading":
+            return None  # too frequent; don't burn the brain queue on these
         return f"skippy:{event_name}"
 
     if topic == "apps/yodel/control":
@@ -408,9 +434,10 @@ def on_message(client: mqtt.Client, _u: Any, msg: mqtt.MQTTMessage) -> None:
         return
 
     print(f"Event: {topic} -> {payload}")
-    enqueue_brain_call(client, label)
+    immediate_reaction(client, label)
     if label.startswith("appeared"):
         push_top_stream(client)
+    enqueue_brain_call(client, label)
 
 
 # ── main ──────────────────────────────────────────────────────────────────────

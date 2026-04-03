@@ -13,7 +13,7 @@ import paho.mqtt.client as mqtt
 MQTT_BROKER = os.getenv("MQTT_BROKER", "192.168.8.100")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "mustard-brain")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "meep-brain")
+OLLAMA_MODEL = "mustard-brain"
 
 DISPLAY_TOPIC = os.getenv("DISPLAY_TOPIC", "apps/eowyn/text")
 GIMLI_TOPIC = os.getenv("GIMLI_TOPIC", "apps/gimli/text")

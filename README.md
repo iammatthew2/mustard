@@ -18,3 +18,7 @@ Available inputs include:
 We have two LED matrix display available:
  - Eowyn: 64x32
  - Gimli: 32x16
+
+
+# Dev
+ollama create mustard-brain -f mustard.mf

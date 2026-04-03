@@ -12,7 +12,7 @@ import paho.mqtt.client as mqtt
 MQTT_BROKER = os.getenv("MQTT_BROKER", "192.168.8.100")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "mustard-brain")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "meep-brain")
 
 DISPLAY_TOPIC = os.getenv("DISPLAY_TOPIC", "apps/eowyn/text")
 GIMLI_TOPIC = os.getenv("GIMLI_TOPIC", "apps/gimli/text")
@@ -32,15 +32,16 @@ OUTPUT_COOLDOWNS = {
 }
 
 DISPLAY_MODES = {"render_text", "fast_read", "clear"}
+GIMLI_MODES = {"render_text", "clear", "test", "test2", "test3", "test4"}
 SKIPPY_COMMANDS = {"open", "close", "left", "right", "middle", "beep"}
 
 SYSTEM_MESSAGE = (
     "You control robots and displays in a room. "
-    "Output ONLY JSON: {\"actions\":[]}. "
+    'Output ONLY JSON: {"state_patch":{},"actions":[]}. '
     "Actions: "
-    "{\"type\":\"display_text\",\"target\":\"eowyn\",\"mode\":\"render_text\",\"text\":\"...\",\"stream\":\"bottom\",\"speed\":30} "
-    "{\"type\":\"display_gimli\",\"mode\":\"render_text\",\"text\":\"...\",\"direction\":\"left\",\"speed\":30} "
-    "{\"type\":\"skippy_control\",\"command\":\"open|close|left|right|middle|beep\"} "
+    '{"type":"display_text","target":"eowyn","mode":"render_text","text":"...","stream":"bottom","speed":30} '
+    '{"type":"display_gimli","mode":"render_text","text":"...","direction":"left","speed":30} '
+    '{"type":"skippy_control","command":"open|close|left|right|middle|beep"} '
     "React with personality. Be sparse. Empty actions if nothing meaningful."
 )
 
@@ -159,6 +160,23 @@ def publish_display_text(client: mqtt.Client, action: dict[str, Any]) -> None:
     publish_json(client, DISPLAY_TOPIC, payload)
 
 
+def publish_display_gimli(client: mqtt.Client, action: dict[str, Any]) -> None:
+    mode = action.get("mode", "render_text")
+    if mode not in GIMLI_MODES:
+        return
+    payload: dict[str, Any] = {"event": mode}
+    if mode == "render_text":
+        text = str(action.get("text", "")).strip()
+        if not text or text == "...":
+            return
+        payload["text"] = text[:32]
+        payload["direction"] = action.get("direction", "left")
+        payload["speed"] = int(action.get("speed", 30))
+    if not can_publish(GIMLI_TOPIC):
+        return
+    publish_json(client, GIMLI_TOPIC, payload)
+
+
 def publish_skippy_control(client: mqtt.Client, action: dict[str, Any]) -> None:
     command = str(action.get("command", "")).strip().lower()
     if command not in SKIPPY_COMMANDS:
@@ -175,7 +193,8 @@ def dispatch_actions(client: mqtt.Client, actions: list[dict[str, Any]]) -> None
         t = action.get("type")
         if t == "display_text":
             publish_display_text(client, action)
-        # gimli is reserved for thinking markers; skip display_gimli from LLM
+        elif t == "display_gimli":
+            publish_display_gimli(client, action)
         elif t == "skippy_control":
             publish_skippy_control(client, action)
 

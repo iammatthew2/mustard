@@ -19,4 +19,4 @@ Rules: sparse reactions, brief text, empty actions if nothing meaningful.
 
 PARAMETER temperature 0.3
 PARAMETER num_ctx 512
-PARAMETER num_predict 80
+PARAMETER num_predict 180
